@@ -1,4 +1,10 @@
-console.log('#58. JavaScript homework example file');
+import fs from "fs";
+import zlib from "zlib";
+import path from "path";
+import { pipeline } from "stream/promises";
+import { access } from "fs/promises";
+
+console.log("#58. JavaScript homework example file");
 
 /*
  *
@@ -39,7 +45,52 @@ console.log('#58. JavaScript homework example file');
  */
 
 async function compressFile(filePath) {
-  // code here
+  const fileExists = async (filePath) => {
+    try {
+      await access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const getUniquePath = async (filePath) => {
+    if (!(await fileExists(filePath))) {
+      return filePath;
+    }
+
+    const dir = path.dirname(filePath);
+    const ext = path.extname(filePath);
+    const base = path.basename(filePath, ext);
+
+    let counter = 1;
+    let newPath;
+
+    do {
+      newPath = path.join(dir, `${base}(${counter})${ext}`);
+      counter++;
+    } while (await fileExists(newPath));
+
+    return newPath;
+  };
+
+  const outputPath = filePath + ".gz";
+  const uniquePath = await getUniquePath(outputPath);
+
+  try {
+    await pipeline(
+      fs.createReadStream(filePath),
+      zlib.createGzip(),
+      fs.createWriteStream(uniquePath),
+    );
+
+    return uniquePath;
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      throw new Error(`Файл не існує: ${filePath}`);
+    }
+    throw error;
+  }
 }
 
 /*
@@ -76,20 +127,65 @@ async function compressFile(filePath) {
  */
 
 async function decompressFile(compressedFilePath, destinationFilePath) {
-  // code here
+  const fileExists = async (filePath) => {
+    try {
+      await access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const getUniquePath = async (filePath) => {
+    if (!(await fileExists(filePath))) {
+      return filePath;
+    }
+
+    let counter = 1;
+    let newPath;
+
+    const dir = path.dirname(filePath);
+    const ext = path.extname(filePath);
+    const base = path.basename(filePath, ext);
+
+    do {
+      newPath = path.join(dir, `${base}(${counter})${ext}`);
+      counter++;
+    } while (await fileExists(newPath));
+    return newPath;
+  };
+
+  const uniquePath = await getUniquePath(destinationFilePath);
+
+  try {
+    await pipeline(
+      fs.createReadStream(compressedFilePath),
+      zlib.createGunzip(),
+      fs.createWriteStream(uniquePath),
+    );
+    return uniquePath;
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      throw new Error(`Файл не існує: ${compressedFilePath}`);
+    }
+    throw error;
+  }
 }
 
 // ! Перевірка роботи функцій стиснення та розпакування файлів
-// async function performCompressionAndDecompression() {
-//   try {
-//     const compressedResult = await compressFile('./files/source.txt')
-//     console.log(compressedResult)
-//     const decompressedResult = await decompressFile(compressedResult, './files/source_decompressed.txt')
-//     console.log(decompressedResult)
-//   } catch (error) {
-//     console.error('Error during compression or decompression:', error)
-//   }
-// }
-// performCompressionAndDecompression()
+async function performCompressionAndDecompression() {
+  try {
+    const compressedResult = await compressFile("./files/source.txt");
+    console.log(compressedResult);
+    const decompressedResult = await decompressFile(
+      compressedResult,
+      "./files/source_decompressed.txt",
+    );
+    console.log(decompressedResult);
+  } catch (error) {
+    console.error("Error during compression or decompression:", error);
+  }
+}
+performCompressionAndDecompression();
 
 export { compressFile, decompressFile };
